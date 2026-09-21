@@ -1,0 +1,18 @@
+# Scenario 30: expose the brokers outside the cluster with a NodePort listener - and advertise a host
+# that does not exist. Clients can bootstrap, then fail to reach the brokers they were told about.
+#
+# Apply (PowerShell, from the project folder):
+#   helm upgrade kafka oci://registry-1.docker.io/bitnamicharts/kafka --version 32.4.3 -n kafka-lab `
+#     -f lab/values.yaml -f scenarios/30-advertised-listeners/values-external-nodeport.yaml --wait --timeout 10m
+#
+# Fix it by advertising the node's own address (find it with: kubectl get node kind-control-plane -o wide):
+#   ... same command ... --set externalAccess.controller.service.domain=172.18.0.2
+#
+# Undo: the same command without the second -f, or: wsl -d Ubuntu -- bash cleanup.sh 30
+externalAccess:
+  enabled: true
+  controller:
+    service:
+      type: NodePort
+      nodePorts: [30094, 30095, 30096]
+      domain: kafka-external.invalid      # WRONG on purpose - nothing resolves this name

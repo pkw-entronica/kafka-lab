@@ -1,0 +1,8 @@
+# Logs from scenario runs on your own cluster - local only
+runs/
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*~

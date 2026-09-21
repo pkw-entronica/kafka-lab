@@ -1,0 +1,42 @@
+# Cuts kafka-controller-2 off from the other two brokers, in both directions, while leaving it
+# reachable for clients (kafka-client, kafka-ui) and for the kubelet's health probes.
+#
+# A NetworkPolicy is an allow-list: whatever the rules below don't allow is dropped. Allowed here:
+#   - pods in kafka-lab that are NOT brokers   (kafka-client, kafka-ui - they have no "component" label)
+#   - pods in other namespaces                 (CoreDNS and the rest of the cluster)
+#   - the kind node itself, 172.18.0.0/16      (kubelet liveness/readiness probes)
+# The other two brokers match none of those, so replication (:9094) and KRaft quorum traffic (:9093)
+# to and from this pod is dropped.
+#
+# Check the node's address first:  kubectl get node kind-control-plane -o wide
+# If its INTERNAL-IP is not in 172.18.0.0/16, change the two ipBlock lines below.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: isolate-broker-2
+  namespace: kafka-lab
+  labels:
+    app.kubernetes.io/part-of: kafka-lab
+spec:
+  podSelector:
+    matchLabels:
+      statefulset.kubernetes.io/pod-name: kafka-controller-2
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - {key: app.kubernetes.io/component, operator: NotIn, values: [controller-eligible]}
+        - namespaceSelector:
+            matchExpressions:
+              - {key: kubernetes.io/metadata.name, operator: NotIn, values: [kafka-lab]}
+        - ipBlock: {cidr: 172.18.0.0/16}
+  egress:
+    - to:
+        - podSelector:
+            matchExpressions:
+              - {key: app.kubernetes.io/component, operator: NotIn, values: [controller-eligible]}
+        - namespaceSelector:
+            matchExpressions:
+              - {key: kubernetes.io/metadata.name, operator: NotIn, values: [kafka-lab]}
+        - ipBlock: {cidr: 172.18.0.0/16}

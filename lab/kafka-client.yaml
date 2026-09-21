@@ -1,0 +1,38 @@
+# Long-running pod with the same Kafka image as the brokers - "the lab shell":
+#   kubectl -n kafka-lab exec -it kafka-client -- bash
+# $BOOTSTRAP is set, all Kafka CLI tools are on PATH, and the lab's helper apps (lab/apps/*.sh) are
+# mounted read-only at /apps from the ConfigMap "lab-apps" (created by lab/install.sh).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kafka-client
+  namespace: kafka-lab
+  labels:
+    app: kafka-client
+spec:
+  restartPolicy: Always
+  terminationGracePeriodSeconds: 5
+  # PID 1 of the container is 'sleep infinity', which never reaps orphaned processes. With a shared PID
+  # namespace the pod's pause process is PID 1 and reaps them, so stopped apps don't pile up as zombies.
+  shareProcessNamespace: true
+  containers:
+    - name: kafka-client
+      image: docker.io/bitnamilegacy/kafka:4.0.0-debian-12-r10
+      command: ["sleep", "infinity"]
+      workingDir: /tmp
+      env:
+        - name: BOOTSTRAP
+          value: kafka.kafka-lab.svc.cluster.local:9092
+        - name: KAFKA_HEAP_OPTS          # small JVMs: scenarios run up to ~8 CLI tools at once
+          value: "-Xms32m -Xmx128m"
+      volumeMounts:
+        - name: lab-apps
+          mountPath: /apps
+      resources:
+        requests: {cpu: 100m, memory: 256Mi}
+        limits:   {memory: 3Gi}
+  volumes:
+    - name: lab-apps
+      configMap:
+        name: lab-apps
+        defaultMode: 0755

@@ -1,0 +1,16 @@
+# Scenario 20: squeeze the brokers - a 128 MB heap, a tight container limit, and GC logging to stdout
+# so the pauses show up in `kubectl logs`.
+#
+# Apply (PowerShell, from the project folder):
+#   helm upgrade kafka oci://registry-1.docker.io/bitnamicharts/kafka --version 32.4.3 -n kafka-lab `
+#     -f lab/values.yaml -f scenarios/20-memory-pressure/values-small-heap.yaml --wait --timeout 10m
+#
+# Undo: run the same command without the second -f, or: wsl -d Ubuntu -- bash cleanup.sh 20
+controller:
+  heapOpts: "-Xms128m -Xmx128m"
+  resources:
+    requests: {cpu: 250m, memory: 256Mi}
+    limits:   {cpu: "2", memory: 512Mi}
+  extraEnvVars:
+    - name: KAFKA_GC_LOG_OPTS
+      value: "-Xlog:gc*:stdout:time,uptime,level,tags"

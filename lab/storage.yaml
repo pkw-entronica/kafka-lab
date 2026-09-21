@@ -1,0 +1,82 @@
+# Static 1Gi local PVs backed by the loop-mounted ext4 images created by lab/node-disks.sh.
+# Each PV is pre-bound (claimRef) to the PVC name the Bitnami StatefulSet will create:
+#   data-kafka-controller-<N>  ->  kafka-lab-disk-<N>  ->  /mnt/kafka-disks/disk-<N>/data (1 GiB ext4)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: kafka-lab-1g
+  labels:
+    app.kubernetes.io/part-of: kafka-lab
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+allowVolumeExpansion: false
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: kafka-lab-disk-0
+  labels:
+    app.kubernetes.io/part-of: kafka-lab
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: kafka-lab-1g
+  claimRef:
+    namespace: kafka-lab
+    name: data-kafka-controller-0
+  local:
+    path: /mnt/kafka-disks/disk-0/data
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - {key: kubernetes.io/hostname, operator: In, values: [kind-control-plane]}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: kafka-lab-disk-1
+  labels:
+    app.kubernetes.io/part-of: kafka-lab
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: kafka-lab-1g
+  claimRef:
+    namespace: kafka-lab
+    name: data-kafka-controller-1
+  local:
+    path: /mnt/kafka-disks/disk-1/data
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - {key: kubernetes.io/hostname, operator: In, values: [kind-control-plane]}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: kafka-lab-disk-2
+  labels:
+    app.kubernetes.io/part-of: kafka-lab
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: kafka-lab-1g
+  claimRef:
+    namespace: kafka-lab
+    name: data-kafka-controller-2
+  local:
+    path: /mnt/kafka-disks/disk-2/data
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - {key: kubernetes.io/hostname, operator: In, values: [kind-control-plane]}

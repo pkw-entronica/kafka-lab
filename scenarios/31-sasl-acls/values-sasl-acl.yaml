@@ -1,0 +1,25 @@
+# Scenario 31: require authentication on the CLIENT listener (SASL_PLAINTEXT, SCRAM-SHA-512) and turn on
+# the authorizer, so every client needs credentials AND an ACL.
+#
+# The controller and inter-broker listeners stay PLAINTEXT, so the brokers keep talking to each other
+# without credentials - "User:ANONYMOUS" is a super user for exactly that reason. "User:admin" is the
+# SCRAM user this scenario creates for administration.
+#
+# Apply (PowerShell, from the project folder):
+#   helm upgrade kafka oci://registry-1.docker.io/bitnamicharts/kafka --version 32.4.3 -n kafka-lab `
+#     -f lab/values.yaml -f scenarios/31-sasl-acls/values-sasl-acl.yaml --wait --timeout 10m
+#
+# Undo (back to PLAINTEXT for the rest of the lab):
+#   helm upgrade kafka oci://registry-1.docker.io/bitnamicharts/kafka --version 32.4.3 -n kafka-lab `
+#     -f lab/values.yaml --wait --timeout 10m
+#   ... or: wsl -d Ubuntu -- bash cleanup.sh 31
+#
+# While this is applied, anything that connects without credentials fails - including kafka-ui and the
+# lab's own scripts (lab-status.sh, smoke-test.sh, cleanup.sh for other scenarios).
+listeners:
+  client:
+    protocol: SASL_PLAINTEXT
+
+authorizerClassName: org.apache.kafka.metadata.authorizer.StandardAuthorizer
+allowEveryoneIfNoAclFound: false
+superUsers: "User:admin;User:ANONYMOUS"

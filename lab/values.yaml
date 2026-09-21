@@ -1,0 +1,67 @@
+# Bitnami Kafka chart for the failure lab.
+#   Chart:  oci://registry-1.docker.io/bitnamicharts/kafka  version 32.4.3  (Kafka 4.0.0)
+#   Install: lab/install.sh (details: README.md, "How the lab is built")
+#
+# Image note: Broadcom removed the free docker.io/bitnami/* images in 2025. The exact tags this chart
+# references still exist, frozen, under docker.io/bitnamilegacy/* (no further updates or CVE fixes).
+# Fine for a lab; do not copy this into production.
+
+global:
+  security:
+    allowInsecureImages: true      # the chart refuses non-default image repositories without this
+
+image:
+  registry: docker.io
+  repository: bitnamilegacy/kafka
+  tag: 4.0.0-debian-12-r10
+
+# Only used if the matching feature gets enabled in a scenario, but point them at images that exist.
+defaultInitContainers:
+  volumePermissions:
+    image: {registry: docker.io, repository: bitnamilegacy/os-shell, tag: 12-debian-12-r51}
+  autoDiscovery:
+    image: {registry: docker.io, repository: bitnamilegacy/kubectl, tag: 1.33.4-debian-12-r0}
+metrics:
+  jmx:
+    image: {registry: docker.io, repository: bitnamilegacy/jmx-exporter, tag: 1.4.0-debian-12-r0}
+
+# PLAINTEXT everywhere, no SASL (the chart defaults to SASL_PLAINTEXT).
+listeners:
+  client:      {protocol: PLAINTEXT}   # :9092  clients  -> kafka.kafka-lab.svc.cluster.local:9092
+  controller:  {protocol: PLAINTEXT}   # :9093  KRaft controller quorum
+  interbroker: {protocol: PLAINTEXT}   # :9094  replication between brokers
+  external:    {protocol: PLAINTEXT}   # :9095  only used if externalAccess is enabled (scenario 30)
+
+# Broker defaults (every node). Topic-level configs can still override them.
+overrideConfiguration:
+  default.replication.factor: "3"
+  min.insync.replicas: "2"
+  auto.create.topics.enable: "true"          # scenario 29 toggles this
+  unclean.leader.election.enable: "false"
+  # Kafka's own defaults, made explicit so internal topics match RF 3 / min ISR 2:
+  offsets.topic.replication.factor: "3"
+  transaction.state.log.replication.factor: "3"
+  transaction.state.log.min.isr: "2"
+
+# 3 combined controller+broker nodes (KRaft, no ZooKeeper): pods kafka-controller-0/1/2
+controller:
+  replicaCount: 3
+  controllerOnly: false
+  heapOpts: "-Xms512m -Xmx512m"
+  resources:
+    requests: {cpu: 250m, memory: 1Gi}
+    limits:   {cpu: "2", memory: 1536Mi}   # heap 512m + metaspace/direct buffers/page-cache headroom
+  persistence:
+    enabled: true
+    storageClass: kafka-lab-1g             # static PVs from lab/storage.yaml, real 1 GiB ext4 each
+    size: 1Gi
+  pdb:
+    create: true                           # chart default (scenario 21 inspects it)
+
+broker:
+  replicaCount: 0                          # no broker-only nodes
+
+# The chart's NetworkPolicy would allow all client/inter-broker traffic. NetworkPolicies are
+# additive allow-lists, so it would defeat the isolation policies used in scenarios 11/16/19.
+networkPolicy:
+  enabled: false

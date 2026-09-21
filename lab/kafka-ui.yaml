@@ -1,0 +1,49 @@
+# kafbat/kafka-ui: web view of brokers, topics, partitions/ISR and consumer lag.
+#   kubectl -n kafka-lab port-forward svc/kafka-ui 8080:8080   ->  http://localhost:8080
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui
+  namespace: kafka-lab
+  labels:
+    app: kafka-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-ui
+  template:
+    metadata:
+      labels:
+        app: kafka-ui
+    spec:
+      containers:
+        - name: kafka-ui
+          image: ghcr.io/kafbat/kafka-ui:v1.5.0
+          ports:
+            - {name: http, containerPort: 8080}
+          env:
+            - {name: KAFKA_CLUSTERS_0_NAME, value: kafka-lab}
+            - {name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS, value: "kafka.kafka-lab.svc.cluster.local:9092"}
+            - {name: DYNAMIC_CONFIG_ENABLED, value: "false"}
+            - {name: JAVA_OPTS, value: "-Xms128m -Xmx384m"}
+          resources:
+            requests: {cpu: 100m, memory: 384Mi}
+            limits:   {memory: 768Mi}
+          readinessProbe:
+            httpGet: {path: /actuator/health, port: http}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-ui
+  namespace: kafka-lab
+  labels:
+    app: kafka-ui
+spec:
+  selector:
+    app: kafka-ui
+  ports:
+    - {name: http, port: 8080, targetPort: http}

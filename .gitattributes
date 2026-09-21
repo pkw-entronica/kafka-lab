@@ -1,0 +1,4 @@
+# Every script here runs inside WSL, the kind node or the Kafka container, so line endings must stay
+# LF even when the repo is cloned on Windows. Without this, Git for Windows' autocrlf would hand you
+# CRLF files and bash would fail with "\r: command not found".
+* text=auto eol=lf

@@ -1,0 +1,5 @@
+# Scenario 04 only ("team policy"): applied ON TOP of lab/values.yaml by 01-normal.sh, removed by 06-cleanup.sh.
+# auto.leader.rebalance.enable is a static (read-only) broker config: changing it needs a broker restart,
+# which is why this goes through Helm (one rolling restart) instead of kafka-configs.
+overrideConfiguration:
+  auto.leader.rebalance.enable: "false"

@@ -1,0 +1,33 @@
+# OPTIONAL - only works if Chaos Mesh is installed, which this lab does NOT do for you.
+# Adds 300 ms of network latency to kafka-controller-2 in both directions, for 10 minutes.
+#
+# The brokers' image has no `tc`, and the pods don't have NET_ADMIN, so latency can't be injected from
+# inside the pod. Chaos Mesh does it from a privileged agent on the node. Installing it creates the
+# namespace chaos-mesh, OUTSIDE kafka-lab, and needs internet access:
+#
+#   helm repo add chaos-mesh https://charts.chaos-mesh.org
+#   helm repo update
+#   helm install chaos-mesh chaos-mesh/chaos-mesh -n chaos-mesh --create-namespace `
+#     --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock
+#
+# Then:  kubectl apply -f scenarios/19-network-partition/networkchaos-delay.yaml
+# Undo:  kubectl delete -f scenarios/19-network-partition/networkchaos-delay.yaml
+# Remove Chaos Mesh again:  helm uninstall chaos-mesh -n chaos-mesh; kubectl delete namespace chaos-mesh
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: delay-broker-2
+  namespace: kafka-lab
+spec:
+  action: delay
+  mode: all
+  direction: both
+  duration: 10m
+  selector:
+    namespaces: [kafka-lab]
+    labelSelectors:
+      statefulset.kubernetes.io/pod-name: kafka-controller-2
+  delay:
+    latency: 300ms
+    jitter: 0ms
+    correlation: "0"
