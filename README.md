@@ -22,7 +22,7 @@ Each step gives you one command to type and the result you should see.
 | 08 | [Poison pill](scenarios/08-poison-pill/README.md) | One bad record crash-loops a consumer; skip it and use a dead letter topic | 20 min |
 | 09 | [Duplicates after a crash](scenarios/09-duplicates-after-crash/README.md) | At-least-once delivery, the commit window, and idempotent processing | 20 min |
 | 10 | [Offset reset surprises](scenarios/10-offset-reset/README.md) | How `auto.offset.reset=latest` silently skips data, and how to rewind a group | 20 min |
-| 11 | [acks=1 and data loss](scenarios/11-acks-and-data-loss/README.md) | Why `min.insync.replicas` does nothing for `acks=1`, and what the ISR really promises | 20 min |
+| 11 | [acks=1 and data loss](scenarios/11-acks-and-data-loss/README.md) | Why `min.insync.replicas` does nothing for `acks=1`, and what the ISR really promises | 15 min |
 | 12 | [Record too large](scenarios/12-record-too-large/README.md) | The broker limit, the producer limit, and where big payloads really belong | 15 min |
 | 13 | [Throttled producer](scenarios/13-producer-quota-timeouts/README.md) | A client quota, a full buffer, blocked sends and timeouts | 15 min |
 | 14 | [Batching: throughput vs latency](scenarios/14-batching-throughput-latency/README.md) | Measure `linger.ms`, `batch.size`, compression and `acks` on this cluster | 20 min |

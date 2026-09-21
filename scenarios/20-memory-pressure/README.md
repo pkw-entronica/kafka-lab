@@ -173,7 +173,7 @@ kafka-leader-election.sh --bootstrap-server $BOOTSTRAP --election-type PREFERRED
 bash /apps/produce-check.sh health-check 5 all
 ```
 ✅ **Expected:** `Successfully completed leader election (PREFERRED) …` (or `Valid replica already
-elected`), then `5 accepted, 0 rejected (acks=-1)` on the auto-created topic `health-check`.
+elected`), then `5 accepted, 0 rejected (acks=all)` on the auto-created topic `health-check`.
 
 ---
 

@@ -33,7 +33,7 @@ kafka-topics.sh --bootstrap-server $BOOTSTRAP --create --topic rolling --partiti
 bash /apps/produce-check.sh rolling 5 all
 bash /apps/isr-watch.sh rolling 2 5
 ```
-✅ **Expected:** `5 accepted, 0 rejected (acks=-1)` and `under-replicated 0   offline 0`.
+✅ **Expected:** `5 accepted, 0 rejected (acks=all)` and `under-replicated 0   offline 0`.
 
 ### Step 3 · PowerShell: the safety net Kubernetes has
 ```powershell

@@ -144,7 +144,7 @@ kafka-topics.sh --bootstrap-server $BOOTSTRAP --describe --topic corrupt-me
 bash /apps/produce-check.sh corrupt-me 5 all
 bash /apps/isr-watch.sh "" 3 5
 ```
-✅ **Expected:** `5 accepted, 0 rejected (acks=-1)` and `under-replicated 0   offline 0` for the whole
+✅ **Expected:** `5 accepted, 0 rejected (acks=all)` and `under-replicated 0   offline 0` for the whole
 cluster.
 
 ---

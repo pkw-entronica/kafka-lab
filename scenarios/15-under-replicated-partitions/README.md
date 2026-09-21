@@ -54,6 +54,14 @@ bash /apps/isr-watch.sh replicated 3 5
 
 Last week someone moved partitions around and left a **replication throttle** behind: 1 byte per second.
 
+> ⚠️ **This break does not work, and Part 2 (a) / Part 3 need redesigning.** Measured on this lab:
+> a replication throttle never removes a replica that is currently **in sync** from the ISR — Kafka
+> skips the throttle for in-sync replicas on purpose (`!isReplicaInSync && isThrottled &&
+> isQuotaExceeded`), so that a throttled reassignment can't cause ISR churn. 20 MB was pushed through
+> a throttled topic at 11 MB/s with the rate set to 1 byte/s and the ISR never moved. Steps 5–11 below
+> will therefore show a **healthy** topic, not an under-replicated one. **Part 5 (b), the broker
+> restart, is real and does work** — see scenario 11 for a deterministic way to shrink an ISR.
+
 ### Step 5 · Throttle this topic's replication
 ```bash
 kafka-configs.sh --bootstrap-server $BOOTSTRAP --entity-type topics --entity-name replicated --alter --add-config 'leader.replication.throttled.replicas=*,follower.replication.throttled.replicas=*'

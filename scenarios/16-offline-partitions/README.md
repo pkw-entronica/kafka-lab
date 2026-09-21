@@ -46,7 +46,7 @@ kafka-topics.sh --bootstrap-server $BOOTSTRAP --describe --topic cache-rf1
 bash /apps/produce-check.sh orders-rf3 5 all
 bash /apps/produce-check.sh cache-rf1 5 all
 ```
-✅ **Expected:** `5 accepted, 0 rejected (acks=-1)` for both.
+✅ **Expected:** `5 accepted, 0 rejected (acks=all)` for both.
 
 ### Step 4 · Look at the controller quorum
 ```bash

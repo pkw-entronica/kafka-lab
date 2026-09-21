@@ -49,6 +49,14 @@ the same 1,000 messages.
 
 ## Part 2 · Break: the ISR shrinks to one, and that broker dies
 
+> ⚠️ **Step 4 does not work and this scenario needs redesigning.** Measured on this lab: a replication
+> throttle never removes a replica that is currently **in sync** from the ISR — Kafka skips the throttle
+> for in-sync replicas on purpose (`!isReplicaInSync && isThrottled && isQuotaExceeded`), so that a
+> throttled reassignment can't cause ISR churn. The ISR will still be `0,1,2` at step 5, so the
+> unclean-election story that follows never starts. Scenario 11 shows a deterministic way to shrink an
+> ISR; this scenario additionally needs the out-of-sync replicas to keep the *older* messages, which
+> the throttle was supposed to provide.
+
 ### Step 4 · Stall replication (the throttle from scenario 11)
 ```bash
 kafka-configs.sh --bootstrap-server $BOOTSTRAP --entity-type topics --entity-name settlements --alter --add-config 'leader.replication.throttled.replicas=*,follower.replication.throttled.replicas=*'
@@ -192,7 +200,7 @@ kafka-topics.sh --bootstrap-server $BOOTSTRAP --describe --topic settlements
 bash /apps/produce-check.sh settlements 5 all
 kafka-get-offsets.sh --bootstrap-server $BOOTSTRAP --topic settlements --time -1
 ```
-✅ **Expected:** `5 accepted, 0 rejected (acks=-1)` and an end offset 5 higher than in step 16. With
+✅ **Expected:** `5 accepted, 0 rejected (acks=all)` and an end offset 5 higher than in step 16. With
 `acks=all`, `min.insync.replicas=2` and unclean election off, an acknowledged message is on at least two
 disks — and can't be thrown away by an election.
 

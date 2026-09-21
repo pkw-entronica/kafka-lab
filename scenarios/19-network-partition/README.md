@@ -146,7 +146,7 @@ again, as in step 2. (Kafka would also do this by itself within ~5 minutes.)
 ```bash
 bash /apps/produce-check.sh netpart 5 all
 ```
-✅ **Expected:** `5 accepted, 0 rejected (acks=-1)`.
+✅ **Expected:** `5 accepted, 0 rejected (acks=all)`.
 
 ---
 

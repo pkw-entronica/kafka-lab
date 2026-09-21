@@ -50,7 +50,7 @@ kafka-configs.sh --bootstrap-server $BOOTSTRAP --entity-type brokers --entity-na
 ```bash
 bash /apps/produce-check.sh external-test 3 all
 ```
-✅ **Expected:** `3 accepted, 0 rejected (acks=-1)`.
+✅ **Expected:** `3 accepted, 0 rejected (acks=all)`.
 
 ---
 
@@ -106,7 +106,7 @@ connect to — the bootstrap address it used is irrelevant from that point on.
 ```bash
 bash /apps/produce-check.sh external-test 3 all
 ```
-✅ **Expected:** `3 accepted, 0 rejected (acks=-1)`. Each listener advertises its own address, so the
+✅ **Expected:** `3 accepted, 0 rejected (acks=all)`. Each listener advertises its own address, so the
 internal clients never noticed. That's why this bug typically only breaks "the new team".
 
 ---

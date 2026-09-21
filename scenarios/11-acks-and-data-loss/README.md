@@ -3,32 +3,33 @@
 **What you'll learn:** what `acks` really promises, why `min.insync.replicas` does **nothing** for
 `acks=1`, and how to see that "accepted" messages exist on a single disk.
 
-**Time:** about 20 minutes.
-
-> **Not yet verified on the lab.** The expected results describe what Kafka should do; exact numbers and
-> timings will differ.
+**Time:** about 15 minutes.
 
 ## How to follow this guide
 
 - Every command runs in the **lab shell** unless it says **PowerShell**. Open the lab shell once from
-  PowerShell and keep it open:
+  PowerShell and keep it open (it survives the broker going away):
   ```powershell
   kubectl -n kafka-lab exec -it kafka-client -- bash
   ```
+- Run the **PowerShell** commands in a second window.
 - After each command, compare what you see with **✅ Expected**. Numbers vary a little from run to run.
 - Stuck, or want to start over? In PowerShell, run `wsl -d Ubuntu -- bash cleanup.sh 11`.
 
 ---
 
-## Part 1 · Normal: three replicas, all in sync
+## Part 1 · Normal: two copies, both in sync
 
-The topic `critical` carries payment instructions: 1 partition, 3 replicas, `min.insync.replicas=2`.
+The topic `critical` carries payment instructions. The team chose **two** copies and
+`min.insync.replicas=2` — "two disks is enough, and Kafka will tell us if it ever isn't".
+
 The **ISR** (in-sync replicas) is the set of replicas that have caught up with the leader. Kafka tracks
-it per partition, and it's the heart of this scenario.
+it per partition, and it's the heart of this scenario. The replicas are pinned to brokers 0 and 2 so
+that the rest of the guide can name them.
 
 ### Step 1 · Create the topic
 ```bash
-kafka-topics.sh --bootstrap-server $BOOTSTRAP --create --topic critical --partitions 1 --replication-factor 3 --config min.insync.replicas=2
+kafka-topics.sh --bootstrap-server $BOOTSTRAP --create --topic critical --replica-assignment 0:2 --config min.insync.replicas=2
 ```
 ✅ **Expected:** `Created topic critical.`
 
@@ -36,142 +37,123 @@ kafka-topics.sh --bootstrap-server $BOOTSTRAP --create --topic critical --partit
 ```bash
 kafka-topics.sh --bootstrap-server $BOOTSTRAP --describe --topic critical
 ```
-✅ **Expected:** one partition line with `Replicas: 0,1,2` and `Isr: 0,1,2` (in some order). All three
-replicas are in sync.
+✅ **Expected:** `ReplicationFactor: 2`, `min.insync.replicas=2`, and one partition line with
+`Leader: 0`, `Replicas: 0,2` and `Isr: 0,2`. Both replicas are in sync.
 
-### Step 3 · Send 200 messages with acks=all
+### Step 3 · Write 20 MB with acks=all
 ```bash
-kafka-verifiable-producer.sh --bootstrap-server $BOOTSTRAP --topic critical --max-messages 200 --throughput 100 --acks -1 > /tmp/s11-normal.json
-grep -c producer_send_success /tmp/s11-normal.json
+kafka-producer-perf-test.sh --topic critical --num-records 20000 --record-size 1024 --throughput -1 --producer-props bootstrap.servers=$BOOTSTRAP acks=-1
 ```
-✅ **Expected:** `200`. With `acks=all` (`-1`), the leader answers only after every in-sync replica has
-the message.
+✅ **Expected:** a summary line like `20000 records sent, 5870.3 records/sec (5.73 MB/sec)`. With
+`acks=all` (`-1`), the leader answers only after every in-sync replica has the message.
 
 ### Step 4 · Where does the data live?
 ```bash
 bash /apps/replica-sizes.sh critical
 ```
-✅ **Expected:** three lines, one per broker, with roughly the same size (a few KB each). The same data
-is on three different disks.
+✅ **Expected:** brokers 0 and 2 hold about **19.8 MB** each — the same data on two different disks.
+Broker 1 shows `0 replicas … 0.00 MB`, because this topic was never placed there.
 
 ---
 
-## Part 2 · Break: replication stalls
+## Part 2 · Break: one of the two copies goes away
 
-A colleague moved partitions around last week and left a **replication throttle** behind: replication is
-limited to 1 byte per second. Nobody noticed, because the topic kept working.
+A node has to be taken out for maintenance. Nobody checks which topics only had two copies to begin
+with. In the lab, scaling the StatefulSet down does the same thing: broker 2 stops, its disk stays.
 
-### Step 5 · Mark the topic's replicas as throttled
-```bash
-kafka-configs.sh --bootstrap-server $BOOTSTRAP --entity-type topics --entity-name critical --alter --add-config 'leader.replication.throttled.replicas=*,follower.replication.throttled.replicas=*'
+### Step 5 · PowerShell: stop broker 2
+```powershell
+kubectl -n kafka-lab scale statefulset kafka-controller --replicas=2
 ```
-✅ **Expected:** `Completed updating config for topic critical.`
-
-### Step 6 · Set the throttle to 1 byte/s on every broker
-```bash
-for b in 0 1 2; do kafka-configs.sh --bootstrap-server $BOOTSTRAP --entity-type brokers --entity-name $b --alter --add-config 'leader.replication.throttled.rate=1,follower.replication.throttled.rate=1'; done
-```
-✅ **Expected:** three times `Completed updating config for broker $b.`
-
-### Step 7 · Keep writing (acks=1, like many apps do)
-```bash
-kafka-verifiable-producer.sh --bootstrap-server $BOOTSTRAP --topic critical --max-messages 500 --throughput 50 --acks 1 > /tmp/s11-acks1.json
-grep -c producer_send_success /tmp/s11-acks1.json
-```
-✅ **Expected:** `500` — every message accepted, no warning of any kind. **Now wait ~60 seconds** (a
-replica leaves the ISR after `replica.lag.time.max.ms`, 30 s by default).
+✅ **Expected:** `statefulset.apps/kafka-controller scaled`. Within ~30 s,
+`kubectl -n kafka-lab get pods` shows only `kafka-controller-0` and `kafka-controller-1`.
+**Wait ~30 seconds** before continuing.
 
 ---
 
 ## Part 3 · Observe: what does the problem look like?
 
-### Step 8 · Who is still in sync?
+### Step 6 · Who is still in sync?
 ```bash
 kafka-topics.sh --bootstrap-server $BOOTSTRAP --describe --topic critical
 ```
-✅ **Expected:** `Replicas: 0,1,2` but `Isr:` with a **single** broker, the leader. The two followers
-fell behind and were dropped from the ISR.
+✅ **Expected:** `Replicas: 0,2` but `Isr: 0` — a **single** replica, the leader. Broker 2 is gone, so
+the controller removed it from the ISR. The partition still has a leader, so it keeps serving.
 
-### Step 9 · Does Kafka consider this a problem?
+### Step 7 · Does Kafka consider this a problem?
 ```bash
 kafka-topics.sh --bootstrap-server $BOOTSTRAP --describe --under-min-isr-partitions
 ```
 ✅ **Expected:** the `critical` partition is listed: its ISR (1) is below `min.insync.replicas` (2).
 This is the metric to alert on (`UnderMinIsrPartitionCount`).
 
-### Step 10 · But acks=1 keeps accepting writes
+### Step 8 · But acks=1 keeps accepting writes
 ```bash
-bash /apps/produce-check.sh critical 10 1
+bash /apps/produce-check.sh critical 5 1
 ```
-✅ **Expected:** 10 × `ok`, then `10 accepted, 0 rejected (acks=1)`. `min.insync.replicas` is **not**
+✅ **Expected:** 5 × `ok`, then `5 accepted, 0 rejected (acks=1)`. `min.insync.replicas` is **not**
 checked for `acks=1`: the leader alone decides.
 
-### Step 11 · Where do those messages live now?
+### Step 9 · 10 MB more with acks=1 — where do they live?
 ```bash
-bash /apps/replica-sizes.sh critical
+kafka-producer-perf-test.sh --topic critical --num-records 10000 --record-size 1024 --throughput -1 --producer-props bootstrap.servers=$BOOTSTRAP acks=1; bash /apps/replica-sizes.sh critical
 ```
-✅ **Expected:** the leader's replica is clearly bigger than the other two (roughly 500 messages more).
-Every message accepted since step 7 exists on **one disk only**. If that broker's disk dies now, they're
-gone — see scenario 17 for exactly how that looks.
+✅ **Expected:** every message accepted, and broker 0 now holds about **29.7 MB** — while broker 2
+isn't listed at all. Roughly 10 MB of acknowledged payments exist on **one disk only**. If that disk
+dies now, they're gone — see scenario 17 for exactly how that looks.
 
-### Step 12 · What acks=all says about the same cluster
+### Step 10 · What acks=all says about the same cluster
 ```bash
-bash /apps/produce-check.sh critical 10 all
+bash /apps/produce-check.sh critical 5 all
 ```
-✅ **Expected:** 10 × `ERROR NotEnoughReplicasException`, then `0 accepted, 10 rejected (acks=all)`.
+✅ **Expected:** 5 × `ERROR NotEnoughReplicasException`, then `0 accepted, 5 rejected (acks=all)`.
 With `acks=all`, Kafka refuses the write because fewer than `min.insync.replicas` replicas are in sync.
 The producer is **told**, instead of silently taking the risk.
 
 ---
 
-## Part 4 · Fix: let replication catch up again
+## Part 4 · Fix: bring the second copy back
 
-### Step 13 · Remove the throttle from the brokers
-```bash
-for b in 0 1 2; do kafka-configs.sh --bootstrap-server $BOOTSTRAP --entity-type brokers --entity-name $b --alter --delete-config 'leader.replication.throttled.rate,follower.replication.throttled.rate'; done
+### Step 11 · PowerShell: start broker 2 again
+```powershell
+kubectl -n kafka-lab scale statefulset kafka-controller --replicas=3
 ```
-✅ **Expected:** three times `Completed updating config for broker $b.`
-
-### Step 14 · Remove it from the topic
-```bash
-kafka-configs.sh --bootstrap-server $BOOTSTRAP --entity-type topics --entity-name critical --alter --delete-config 'leader.replication.throttled.replicas,follower.replication.throttled.replicas'
-```
-✅ **Expected:** `Completed updating config for topic critical.`
+✅ **Expected:** `statefulset.apps/kafka-controller scaled`, and the pod is `Running` again after
+~60–90 s.
 
 ---
 
 ## Part 5 · Back to normal
 
-### Step 15 · The ISR fills up again
+### Step 12 · The ISR fills up again
 ```bash
 kafka-topics.sh --bootstrap-server $BOOTSTRAP --describe --topic critical
 ```
-✅ **Expected:** within ~30 s, `Isr: 0,1,2` again. Run it again if a replica is still missing.
+✅ **Expected:** `Isr: 0,2` again, usually within ~30 s of the pod being ready. Run it again if the
+second replica is still missing — it has ~10 MB to copy.
 
-### Step 16 · acks=all works again
+### Step 13 · acks=all works again
 ```bash
-bash /apps/produce-check.sh critical 10 all
+bash /apps/produce-check.sh critical 5 all
 ```
-✅ **Expected:** 10 × `ok`, then `10 accepted, 0 rejected (acks=all)`, as in step 3.
+✅ **Expected:** 5 × `ok`, then `5 accepted, 0 rejected (acks=all)`, as in step 3.
 
-### Step 17 · All three disks have the data
+### Step 14 · Both disks have the data
 ```bash
 bash /apps/replica-sizes.sh critical
 ```
-✅ **Expected:** the three sizes match again, as in step 4.
+✅ **Expected:** brokers 0 and 2 match again (about **29.7 MB** each). The copy caught up on its own.
 
 ---
 
 ## Part 6 · Clean up
 
-### Step 18 · Delete the topic and any leftover throttles
+### Step 15 · Delete the topic
 ```bash
-kafka-topics.sh --bootstrap-server $BOOTSTRAP --delete --topic critical
-for b in 0 1 2; do kafka-configs.sh --bootstrap-server $BOOTSTRAP --entity-type brokers --entity-name $b --alter --delete-config 'leader.replication.throttled.rate,follower.replication.throttled.rate' 2>/dev/null; done
-rm -f /tmp/s11-*
+kafka-topics.sh --bootstrap-server $BOOTSTRAP --delete --topic critical; rm -f /tmp/s11-*
 ```
-✅ **Expected:** nothing from the delete, and `Completed updating config for broker …` (or an error that
-the config isn't set, which is fine — it means step 13 already removed it).
+✅ **Expected:** no output. Check with `kubectl -n kafka-lab get pods` that all three brokers are
+`Running` — if you stopped after Part 2, scale the StatefulSet back to 3 first.
 
 ---
 
@@ -186,13 +168,24 @@ the config isn't set, which is fine — it means step 13 already removed it).
 - **`min.insync.replicas` is only checked for `acks=all`.** It's the other half of the promise: with
   `acks=all` **and** `min.insync.replicas=2`, at least two brokers have every acknowledged message, and
   Kafka rejects writes (`NotEnoughReplicas`) when that's no longer true. `acks=1` ignores it completely.
-- **The ISR is what makes `acks=all` meaningful.** A replica leaves the ISR when it hasn't caught up for
-  `replica.lag.time.max.ms` (30 s). Common causes: a slow or overloaded broker, a leftover replication
-  throttle (this scenario), a network problem (scenario 19), a restart (scenario 15).
+- **RF 2 leaves no room.** With two copies and `min.insync.replicas=2`, a single broker restart already
+  stops `acks=all` writes — the config is either unsafe (`acks=1`) or unavailable (`acks=all`), with
+  nothing in between. RF **3** with `min.insync.replicas=2` is the combination that survives one broker
+  going away and still guarantees two copies of everything. Scenario 16 shows the mirror-image mistake:
+  RF 3 with `min.insync.replicas=3`, which is just as brittle.
+- **The ISR is what makes `acks=all` meaningful.** A replica leaves the ISR when its broker is gone, or
+  when it hasn't caught up for `replica.lag.time.max.ms` (30 s). Common causes: a broker that is away
+  (this scenario, and scenario 15), a slow or overloaded broker, a network problem (scenario 19).
+- **A replication throttle is *not* a way to shrink the ISR.** It is tempting to think
+  `follower.replication.throttled.rate=1` would starve the followers out of the ISR. It does not: Kafka
+  deliberately skips the throttle for any replica that is currently **in sync** — the check is
+  `!isReplicaInSync && isThrottled && isQuotaExceeded`, on both the leader and the follower side —
+  precisely so that a throttled partition reassignment cannot cause ISR churn. Measured on this lab:
+  20 MB pushed through the topic at 11 MB/s with the rate set to 1 byte/s, and the ISR never moved.
 - **Prevent it:**
   - `acks=all` + `min.insync.replicas=2` + RF 3 for anything you can't lose, and handle
     `NotEnoughReplicasException` in the app (retry, or buffer and alert).
   - Alert on `UnderMinIsrPartitionCount` > 0 and `UnderReplicatedPartitions` > 0.
-  - Check for leftover `*.replication.throttled.*` configs after every partition reassignment.
+  - Before draining a node, check which topics have RF < 3 — they are the ones that will notice.
 - **The other half of this story:** losing an under-replicated partition's leader is scenario 17
   (unclean leader election), where those "accepted" messages actually disappear.

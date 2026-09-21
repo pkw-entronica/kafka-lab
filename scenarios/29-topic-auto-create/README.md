@@ -42,7 +42,7 @@ kafka-topics.sh --bootstrap-server $BOOTSTRAP --describe --topic orders-app
 bash /apps/produce-check.sh orders-app 5 all
 kafka-get-offsets.sh --bootstrap-server $BOOTSTRAP --topic orders-app --time -1 | awk -F: '{ s += $3 } END { print "messages in orders-app:", s }'
 ```
-✅ **Expected:** `5 accepted, 0 rejected (acks=-1)` and `messages in orders-app: 5`.
+✅ **Expected:** `5 accepted, 0 rejected (acks=all)` and `messages in orders-app: 5`.
 
 ---
 
@@ -138,7 +138,7 @@ kafka-topics.sh --bootstrap-server $BOOTSTRAP --list | grep ordrs; echo "(nothin
 ```bash
 bash /apps/produce-check.sh orders-app 5 all
 ```
-✅ **Expected:** `5 accepted, 0 rejected (acks=-1)`.
+✅ **Expected:** `5 accepted, 0 rejected (acks=all)`.
 
 ---
 

@@ -66,7 +66,7 @@ for n in "${nums[@]}"; do
   for p in "${pats[@]}"; do kx "kill_strays '$p'"; done
   # Undo the cluster-level changes first, so the cluster can delete the topics afterwards.
   case "$n" in
-    11|15|17)
+    15|17)
       step "removing replication throttles from the brokers"
       kx 'for b in 0 1 2; do kafka-configs.sh --bootstrap-server "$B" --entity-type brokers --entity-name $b \
             --alter --delete-config leader.replication.throttled.rate,follower.replication.throttled.rate >/dev/null 2>&1 || true
@@ -77,7 +77,7 @@ for n in "${nums[@]}"; do
             kafka-configs.sh --bootstrap-server "$B" --alter --entity-type clients --entity-name batch-job \
               --delete-config $c >/dev/null 2>&1 || true
           done; echo "   quotas removed (if they were set)"' ;;
-    16|26|32)
+    11|16|26|32)
       reps="$(k get "statefulset/$BROKER_STS" -o jsonpath='{.spec.replicas}' 2>/dev/null || echo 3)"
       if [ "$reps" != "3" ]; then
         step "scaling the brokers back to 3"

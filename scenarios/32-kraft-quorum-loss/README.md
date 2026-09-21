@@ -50,7 +50,7 @@ kafka-metadata-quorum.sh --bootstrap-server $BOOTSTRAP describe --replication
 kafka-topics.sh --bootstrap-server $BOOTSTRAP --create --topic quorum-test --partitions 3 --replication-factor 3
 bash /apps/produce-check.sh quorum-test 5 all
 ```
-✅ **Expected:** `Created topic quorum-test.` and `5 accepted, 0 rejected (acks=-1)`.
+✅ **Expected:** `Created topic quorum-test.` and `5 accepted, 0 rejected (acks=all)`.
 
 ---
 
@@ -74,7 +74,7 @@ Two of three voters are alive — that **is** a majority, so the metadata log ca
 kafka-topics.sh --bootstrap-server $BOOTSTRAP --create --topic quorum-ok-1 --partitions 1 --replication-factor 2
 bash /apps/produce-check.sh quorum-test 5 all
 ```
-✅ **Expected:** `Created topic quorum-ok-1.` and `5 accepted, 0 rejected (acks=-1)`. A 3-node quorum is
+✅ **Expected:** `Created topic quorum-ok-1.` and `5 accepted, 0 rejected (acks=all)`. A 3-node quorum is
 designed to survive exactly this.
 
 ### Step 7 · PowerShell: now stop broker 1 as well
@@ -171,7 +171,7 @@ bash /apps/isr-watch.sh "" 4 5
 bash /apps/produce-check.sh quorum-test 5 all
 ```
 ✅ **Expected:** `under-replicated 0   offline 0` after the replicas catch up, and
-`5 accepted, 0 rejected (acks=-1)`.
+`5 accepted, 0 rejected (acks=all)`.
 
 ---
 
