@@ -73,9 +73,13 @@ wsl -d Ubuntu -- bash lab/smoke-test.sh
 ```powershell
 kubectl -n kafka-lab exec -it kafka-client -- bash
 ```
-✅ **Expected:** a bash prompt inside the pod `kafka-client`. Two things are ready there:
+✅ **Expected:** a bash prompt inside the pod `kafka-client`. Three things are ready there:
 - `echo $BOOTSTRAP` prints the Kafka address;
-- `ls /apps` lists the lab's helper tools.
+- `ls /apps` lists the lab's helper tools;
+- Kafka's own tools are already on `PATH`, so the scenarios type `kafka-topics.sh` and not a full path.
+  They live in **`/opt/bitnami/kafka/bin`** — `ls /opt/bitnami/kafka/bin` is the quickest way to see
+  everything Kafka ships. Use plain `bash` as above: a *login* shell (`bash -l`, `su -`) rebuilds
+  `PATH` from `/etc/profile` and the Kafka tools disappear from it.
 
 **If you have other kind clusters**, point kubectl at this one while you work on the lab, because the
 `kubectl` commands in the scenarios follow your *current* context:
@@ -148,6 +152,7 @@ kubectl -n kafka-lab port-forward svc/kafka-ui 8080:8080
 | Brokers stuck in `ContainerCreating` after Docker restarted | `wsl -d Ubuntu -- bash lab/node-disks.sh` re-mounts the broker disks. |
 | A command says something isn't found (`kind-control-plane`, the namespace, the pod) | kubectl is pointed at a different cluster. `kubectl config current-context` should say `kind-kind`; fix it with `kubectl config use-context kind-kind`. |
 | `ls /apps` is empty or missing, or a tool a scenario uses isn't there | Run `lab/install.sh` again, then reopen the lab shell. |
+| `kafka-topics.sh: command not found` in the lab shell | You're in a *login* shell (`bash -l`, `su -`), which resets `PATH`. Leave it and reopen with `kubectl -n kafka-lab exec -it kafka-client -- bash`, or call the tool by full path: `/opt/bitnami/kafka/bin/kafka-topics.sh`. |
 | A command doesn't show the ✅ Expected result | Wait a few seconds and run it again (Kafka clients need time to notice changes). Still wrong? Reset with `cleanup.sh NN` and restart the scenario. |
 | `Wsl/Service/0x8007274c` or `UtilAcceptVsock … failed` | Windows is low on free memory. Close other apps, run `wsl --terminate Ubuntu`, and retry. Docker and Kafka keep running. |
 
@@ -183,6 +188,7 @@ lab/                         the lab itself
 | Bootstrap | `kafka.kafka-lab.svc.cluster.local:9092` (`$BOOTSTRAP` in the lab shell) |
 | Disks | a real 1 GiB disk per broker (loop-mounted ext4, set up by `lab/node-disks.sh`), so "disk full" is real |
 | Lab shell | pod `kafka-client`, same Kafka image, tools from `lab/apps` mounted at `/apps` |
+| Kafka CLI tools | `/opt/bitnami/kafka/bin` (on `PATH` in the lab shell and in the broker pods) |
 | UI | kafka-ui (kafbat) |
 
 Things to know:
