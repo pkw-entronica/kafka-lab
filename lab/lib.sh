@@ -2,6 +2,9 @@
 # Shared helpers for the lab's own scripts (install.sh, lab-status.sh, smoke-test.sh, node-disks.sh, cleanup.sh).
 # The scenarios don't use this file: they are plain commands in scenarios/NN-name/README.md.
 set -euo pipefail
+# Git Bash (MSYS) rewrites bare /paths in arguments into Windows paths, which breaks commands meant
+# for the containers (e.g. df -h /bitnami/kafka). Harmless on WSL and Linux.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 
 LAB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$LAB_DIR")"
@@ -31,6 +34,15 @@ pick() {
   echo "ERROR: none of [$*] found on PATH" >&2; return 1
 }
 KUBECTL="${KUBECTL:-$(pick kubectl kubectl.exe)}"
+# The lab always talks to its own cluster, whatever kubectl's current context is - you may well have
+# other kind clusters. Override with KUBE_CONTEXT=... if you renamed it.
+KUBE_CONTEXT="${KUBE_CONTEXT:-kind-kind}"
+KCTX=(--context "$KUBE_CONTEXT"); HCTX=(--kube-context "$KUBE_CONTEXT")   # for kubectl / for helm
+if ! "$KUBECTL" config get-contexts -o name 2>/dev/null | grep -qx -- "$KUBE_CONTEXT"; then
+  KCTX=(); HCTX=()
+  echo "!! kube context '$KUBE_CONTEXT' not found - falling back to the current one ($("$KUBECTL" config current-context 2>/dev/null))" >&2
+fi
+kctl() { "$KUBECTL" "${KCTX[@]}" "$@"; }
 helm_bin()   { pick helm helm.exe; }
 # Docker Desktop puts a 'docker' stub into WSL distros without integration; only use one that works.
 docker_bin() {
@@ -40,7 +52,7 @@ docker_bin() {
   done
   echo "ERROR: no working docker CLI found" >&2; return 1
 }
-k() { "$KUBECTL" -n "$NS" "$@"; }
+k() { kctl -n "$NS" "$@"; }
 
 # ---------------------------------------------------------------------------------------------
 # POD_LIB: bash functions available inside every kx snippet (they run in kafka-client).
@@ -83,7 +95,7 @@ _b64() { base64 | tr -d '\n'; }
 POD_LIB_FILE="/tmp/lab-pod-lib-$(printf '%s' "$POD_LIB" | cksum | cut -d' ' -f1).sh"
 _pod_lib_install() {
   local b64; b64="$(printf '%s\n' "$POD_LIB" | _b64)"
-  "$KUBECTL" -n "$NS" exec "$CLIENT_POD" -- bash -c \
+  kctl -n "$NS" exec "$CLIENT_POD" -- bash -c \
     "echo $b64 | base64 -d > $POD_LIB_FILE.tmp && mv $POD_LIB_FILE.tmp $POD_LIB_FILE"
 }
 
@@ -95,10 +107,10 @@ kx() {
   b64="$(printf "export BOOTSTRAP='%s'\n[ -f %s ] || exit 97\n. %s\n%s" \
          "$BOOTSTRAP" "$POD_LIB_FILE" "$POD_LIB_FILE" "$script" | _b64)"
   [ "${#b64}" -lt 30000 ] || die "kx snippet too large (${#b64} bytes base64); split it up"
-  "$KUBECTL" -n "$NS" exec "$CLIENT_POD" -- bash -c "echo $b64 | base64 -d | bash" || rc=$?
+  kctl -n "$NS" exec "$CLIENT_POD" -- bash -c "echo $b64 | base64 -d | bash" || rc=$?
   if [ "$rc" -eq 97 ]; then          # library not in the pod yet: install it and run again
     _pod_lib_install || return 1
-    rc=0; "$KUBECTL" -n "$NS" exec "$CLIENT_POD" -- bash -c "echo $b64 | base64 -d | bash" || rc=$?
+    rc=0; kctl -n "$NS" exec "$CLIENT_POD" -- bash -c "echo $b64 | base64 -d | bash" || rc=$?
   fi
   return "$rc"
 }
@@ -109,7 +121,7 @@ kxb() {
   local script b64
   if [ $# -gt 0 ]; then script="$*"; else script="$(cat)"; fi
   b64="$(printf '%s' "$script" | _b64)"
-  "$KUBECTL" -n "$NS" exec "$pod" -c kafka -- bash -c "echo $b64 | base64 -d | bash"
+  kctl -n "$NS" exec "$pod" -c kafka -- bash -c "echo $b64 | base64 -d | bash"
 }
 
 # ---- cluster-level helpers ----
@@ -150,7 +162,7 @@ helm_lab_upgrade() {
   local args=(-f lab/values.yaml) f
   for f in "$@"; do args+=(-f "$f"); done
   ( cd "$ROOT_DIR" && "$helm" upgrade --install "$RELEASE" "$CHART" --version "$CHART_VERSION" \
-      -n "$NS" "${args[@]}" --wait --timeout 10m ) | { grep -E '^(Release|STATUS:|REVISION:)' || true; }
+      "${HCTX[@]}" -n "$NS" "${args[@]}" --wait --timeout 10m ) | { grep -E '^(Release|STATUS:|REVISION:)' || true; }
 }
 broker_config() { # broker_config KEY [BROKER_ID] : effective value of a broker config
   kx "kafka-configs.sh --bootstrap-server \"\$B\" --entity-type brokers --entity-name ${2:-0} --describe --all 2>/dev/null \

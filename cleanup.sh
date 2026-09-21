@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 . "$ROOT/lab/lib.sh"
 
 case "${1:-}" in -h|--help) sed -n '2,9s/^# \{0,1\}//p' "$0"; exit 0 ;; esac
-"$KUBECTL" version --request-timeout=5s >/dev/null 2>&1 || die "cluster unreachable - is Docker Desktop running?"
+kctl version --request-timeout=5s >/dev/null 2>&1 || die "cluster unreachable - is Docker Desktop running?"
 
 # What each scenario creates:  processes to stop | consumer groups | topics
 declare -A PROCS CGROUPS TOPICS

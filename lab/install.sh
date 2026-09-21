@@ -4,11 +4,11 @@
 cd "$LAB_DIR"                 # relative paths also work for Windows helm.exe/kubectl.exe
 
 hdr "1. Namespace $NS"
-"$KUBECTL" create namespace "$NS" --dry-run=client -o yaml | "$KUBECTL" apply -f -
+kctl create namespace "$NS" --dry-run=client -o yaml | kctl apply -f -
 
 hdr "2a. Storage: real 1 GiB volumes (loop-mounted ext4) + static PVs"
 bash ./node-disks.sh
-"$KUBECTL" apply -f storage.yaml
+kctl apply -f storage.yaml
 
 hdr "2b. Helm release '$RELEASE' ($CHART $CHART_VERSION, values: lab/values.yaml)"
 helm_lab_upgrade
@@ -16,7 +16,7 @@ helm_lab_upgrade
 # random KRaft cluster-id than the one stored in the Secret; every later upgrade uses lookup() and is
 # stable. So the first upgrade after install rolls all brokers once. Do that settling upgrade now,
 # so re-running this script later (mid-scenario) never restarts Kafka unexpectedly.
-if [ "$("$(helm_bin)" -n "$NS" history "$RELEASE" -o json | grep -o '"revision":' | wc -l)" -eq 1 ]; then
+if [ "$("$(helm_bin)" "${HCTX[@]}" -n "$NS" history "$RELEASE" -o json | grep -o '"revision":' | wc -l)" -eq 1 ]; then
   step "fresh install: one settling upgrade (expect a single rolling restart now)"
   helm_lab_upgrade
 fi
@@ -25,7 +25,7 @@ k get pods -l "$BROKER_SELECTOR" -o wide
 k get pvc
 
 hdr "4. kafka-client pod (the lab shell) with the helper apps from lab/apps mounted at /apps"
-"$KUBECTL" -n "$NS" create configmap lab-apps --from-file=apps/ --dry-run=client -o yaml | "$KUBECTL" apply -f -
+kctl -n "$NS" create configmap lab-apps --from-file=apps/ --dry-run=client -o yaml | kctl apply -f -
 if ! k apply -f kafka-client.yaml 2>/tmp/kafka-client-apply.err; then
   if grep -q "Forbidden: pod updates may not change" /tmp/kafka-client-apply.err; then
     step "kafka-client spec changed in an immutable field: recreating the pod (it holds no state)"

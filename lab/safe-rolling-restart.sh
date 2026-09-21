@@ -9,7 +9,7 @@
 . "$(dirname "$0")/lib.sh"
 
 ids=("$@"); [ $# -eq 0 ] && ids=(0 1 2)
-"$KUBECTL" version --request-timeout=5s >/dev/null 2>&1 || die "cluster unreachable - is Docker Desktop running?"
+kctl version --request-timeout=5s >/dev/null 2>&1 || die "cluster unreachable - is Docker Desktop running?"
 
 hdr "Safe rolling restart of $BROKER_STS (brokers: ${ids[*]})"
 step "checking that the cluster is healthy before touching anything"

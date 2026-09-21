@@ -77,6 +77,14 @@ kubectl -n kafka-lab exec -it kafka-client -- bash
 - `echo $BOOTSTRAP` prints the Kafka address;
 - `ls /apps` lists the lab's helper tools.
 
+**If you have other kind clusters**, point kubectl at this one while you work on the lab, because the
+`kubectl` commands in the scenarios follow your *current* context:
+```powershell
+kubectl config use-context kind-kind
+```
+The lab's own scripts (`install.sh`, `cleanup.sh`, `lab-status.sh` …) don't care: they always target
+the `kind-kind` context. Set `KUBE_CONTEXT=...` if you ever rename it.
+
 ---
 
 ## 2. Run a scenario
@@ -138,6 +146,7 @@ kubectl -n kafka-lab port-forward svc/kafka-ui 8080:8080
 |---|---|
 | `Unable to connect to the server` | Start Docker Desktop and wait ~1 minute. |
 | Brokers stuck in `ContainerCreating` after Docker restarted | `wsl -d Ubuntu -- bash lab/node-disks.sh` re-mounts the broker disks. |
+| A command says something isn't found (`kind-control-plane`, the namespace, the pod) | kubectl is pointed at a different cluster. `kubectl config current-context` should say `kind-kind`; fix it with `kubectl config use-context kind-kind`. |
 | `ls /apps` is empty or missing, or a tool a scenario uses isn't there | Run `lab/install.sh` again, then reopen the lab shell. |
 | A command doesn't show the ✅ Expected result | Wait a few seconds and run it again (Kafka clients need time to notice changes). Still wrong? Reset with `cleanup.sh NN` and restart the scenario. |
 | `Wsl/Service/0x8007274c` or `UtilAcceptVsock … failed` | Windows is low on free memory. Close other apps, run `wsl --terminate Ubuntu`, and retry. Docker and Kafka keep running. |
