@@ -45,7 +45,9 @@ Each step gives you one command to type and the result you should see.
 | 31 | [Authentication and ACLs](scenarios/31-sasl-acls/README.md) | Bad credentials, a missing topic ACL, a missing group ACL — and how to grant them | 35 min |
 | 32 | [KRaft quorum loss](scenarios/32-kraft-quorum-loss/README.md) | One controller down is fine, two is not: metadata frozen while data keeps flowing | 25 min |
 
-Scenarios 06–32 haven't been run on the lab yet; their expected results may need small corrections.
+Scenarios 01–05, 10 and 11 have been run on the lab and their expected results match. The rest haven't
+been run yet, so their expected results may need corrections — scenario 11 needed a redesign, and
+scenarios 15 and 17 carry a warning about a break that cannot work.
 From 15 onwards a scenario stops brokers, fills a disk, cuts the network or changes the Helm values —
 run them one at a time, and let `cleanup.sh NN` put the cluster back. Scenario 31 switches on
 authentication for everything, so finish its cleanup before you run anything else.
@@ -144,7 +146,70 @@ kubectl -n kafka-lab port-forward svc/kafka-ui 8080:8080
 
 ---
 
-## 3. Troubleshooting
+## 3. Clean up
+
+Four levels, from the one you'll use every day to the one that removes everything. All of them run in
+**PowerShell**, from the project folder.
+
+### After a scenario — reset that scenario (the usual one)
+
+Stops its apps, deletes its topics and consumer groups, and undoes any cluster settings it changed
+(throttles, quotas, a scaled-down StatefulSet, a NetworkPolicy, Helm values). The brokers and their
+data stay.
+```powershell
+wsl -d Ubuntu -- bash cleanup.sh 10
+```
+Leave out the number to reset **every** scenario: `wsl -d Ubuntu -- bash cleanup.sh`.
+
+### Done for today — stop the lab, keep everything
+
+Quit Docker Desktop, or just stop the node container. Nothing is lost: the Kafka data lives in the
+broker disk images inside it.
+```powershell
+docker stop kind-control-plane
+```
+To come back: start Docker Desktop, `docker start kind-control-plane`, then re-mount the broker disks
+with `wsl -d Ubuntu -- bash lab/node-disks.sh` — loop mounts don't survive a restart of the node
+container, and the brokers won't start without them.
+
+### Start Kafka from scratch — wipe the data, keep the cluster
+
+Use this when the lab is in a state no `cleanup.sh` can fix. It deletes **all** Kafka data and the
+three 1 GiB disk images, then rebuilds. Two of these reach **outside** the `kafka-lab` namespace:
+`delete -f lab/storage.yaml` removes the cluster-wide `kafka-lab-disk-*` PersistentVolumes and the
+`kafka-lab-1g` StorageClass, and the `docker exec` deletes files inside the kind node. The
+`--context` / `--kube-context` flags are there on purpose — these commands are destructive, and
+without them they would follow whatever context kubectl happens to be pointing at.
+```powershell
+helm --kube-context kind-kind -n kafka-lab uninstall kafka
+kubectl --context kind-kind -n kafka-lab delete pvc --all
+kubectl --context kind-kind delete -f lab/storage.yaml
+docker exec kind-control-plane sh -c 'umount /mnt/kafka-disks/disk-*; rm -f /var/kafka-disks/disk-*.img'
+kubectl --context kind-kind delete namespace kafka-lab
+wsl -d Ubuntu -- bash lab/install.sh
+```
+The PVs use `persistentVolumeReclaimPolicy: Retain`, so deleting the PVCs alone leaves them `Released`
+and nothing will rebind — that's why `kubectl delete -f lab/storage.yaml` is not optional.
+
+> Don't run `helm uninstall` on its own just to change a setting: it deletes the KRaft cluster id, and
+> the brokers then refuse the data already on their disks. Edit `lab/values.yaml` and re-run
+> `lab/install.sh` instead.
+
+### Finished with the lab — remove it completely
+
+Deletes the kind cluster, its node container, the broker disk images and everything in it. Only the
+files in this repo are left.
+```powershell
+kind delete cluster --name kind
+```
+**Name the cluster explicitly.** Plain `kind delete cluster` targets the one called `kind`, which *is*
+this lab — but if you keep other kind clusters, being explicit is what stops you deleting the wrong
+one. `kind get clusters` lists them. The Bitnami and kind images stay in Docker; remove them with
+`docker image prune -a` if you want the disk space back.
+
+---
+
+## 4. Troubleshooting
 
 | Problem | Fix |
 |---|---|
@@ -158,7 +223,7 @@ kubectl -n kafka-lab port-forward svc/kafka-ui 8080:8080
 
 ---
 
-## 4. Project layout
+## 5. Project layout
 
 ```
 README.md                    this guide
@@ -197,13 +262,11 @@ Things to know:
   "substituted images" warnings during install are expected.
 - **Don't `helm uninstall`** to reset settings. It deletes the cluster id, and the brokers would then refuse
   their data. Change `lab/values.yaml` and run `lab/install.sh` again instead.
-- **Full wipe** (deletes all Kafka data):
-  1. `helm -n kafka-lab uninstall kafka`
-  2. `kubectl -n kafka-lab delete pvc --all`
-  3. `kubectl delete -f lab/storage.yaml`
-  4. `docker exec kind-control-plane sh -c 'umount /mnt/kafka-disks/disk-*; rm -f /var/kafka-disks/disk-*.img'`
-  5. `kubectl delete namespace kafka-lab`
-  6. `lab/install.sh`
+- **Storage:** three PersistentVolumes `kafka-lab-disk-0/1/2` (StorageClass `kafka-lab-1g`,
+  `persistentVolumeReclaimPolicy: Retain`) bound to the StatefulSet's `data-kafka-controller-N` claims.
+  Each points at `/mnt/kafka-disks/disk-N/data`, which only exists inside a loop-mounted ext4 image at
+  `/var/kafka-disks/disk-N.img` in the kind node.
+- **Wiping or removing the lab:** see [3. Clean up](#3-clean-up).
 
 </details>
 
