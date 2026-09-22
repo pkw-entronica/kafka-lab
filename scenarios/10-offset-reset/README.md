@@ -6,8 +6,9 @@ topic's retention silently skips data (while its lag says 0), and how to rewind 
 
 **Time:** about 20 minutes.
 
-> **Not yet verified on the lab.** The expected results describe what Kafka should do; exact numbers and
-> timings will differ.
+> Verified end to end on the lab. The offsets and event numbers below are from one run — yours will
+> differ, because they depend on how long each step took. What matters is the **shape**: where the gap
+> starts and ends relative to the low watermark.
 
 ## How to follow this guide
 
@@ -56,8 +57,9 @@ nohup bash /apps/numbered-producer.sh audit audit 5 >/dev/null 2>&1 &
 ```bash
 bash /apps/gap-check.sh /tmp/s10-report.log audit
 ```
-✅ **Expected:** `~100 messages read (~100 different), from audit-000001 to audit-0001xx` and
-`0 missing in between`.
+✅ **Expected:** something like `95 messages read (95 different), from audit-000001 to audit-000095`
+and `0 missing in between`. The count depends on how long you waited; what matters is that it starts
+at `audit-000001` and nothing is missing.
 
 ### Step 5 · Where does a brand-new group start?
 ```bash
@@ -139,7 +141,8 @@ What happened when the service came back:
 ```bash
 pkill -f "group audit-report"
 ```
-✅ **Expected:** `Done` or `Terminated`. The group must be empty to change its offsets.
+✅ **Expected:** `Done` or `Terminated`. Give it a few seconds before the next step: the group must have
+**no active members** to change its offsets, and `--reset-offsets` refuses while one is still leaving.
 
 ### Step 13 · Preview rewinding to the oldest record still in Kafka
 ```bash
